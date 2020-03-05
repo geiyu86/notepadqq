@@ -40,6 +40,7 @@
 #include <QtPrintSupport/QPrintDialog>
 #include <QtPrintSupport/QPrintPreviewDialog>
 #include <QtPromise>
+#include <QFileSystemModel>
 
 using namespace QtPromise;
 
@@ -49,6 +50,7 @@ MainWindow::MainWindow(const QString &workingDirectory, const QStringList &argum
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     m_topEditorContainer(new TopEditorContainer(this)),
+    m_contentWidget(new QSplitter),
     m_settings(NqqSettings::getInstance()),
     m_workingDirectory(workingDirectory),
     m_advSearchDock(new AdvancedSearchDock(this))
@@ -59,7 +61,9 @@ MainWindow::MainWindow(const QString &workingDirectory, const QStringList &argum
     MainWindow::m_instances.append(this);
 
     // Gets company name from QCoreApplication::setOrganizationName(). Same for app name.
-    setCentralWidget(m_topEditorContainer);
+    m_contentWidget->addWidget(m_topEditorContainer);
+
+    setCentralWidget(m_contentWidget);
 
     m_docEngine = new DocEngine(m_topEditorContainer);
     connect(m_docEngine, &DocEngine::fileOnDiskChanged, this, &MainWindow::on_fileOnDiskChanged);
@@ -98,6 +102,7 @@ MainWindow::MainWindow(const QString &workingDirectory, const QStringList &argum
     m_tabContextMenuActions.append(ui->actionClone_to_Other_View);
     m_tabContextMenuActions.append(ui->actionMove_to_New_Window);
     m_tabContextMenuActions.append(ui->actionOpen_in_New_Window);
+    m_tabContextMenuActions.append(ui->actionSync_Current_File_in_Explorer);
     m_tabContextMenu->addActions(m_tabContextMenuActions);
 
     fixKeyboardShortcuts();
@@ -309,6 +314,7 @@ void MainWindow::loadIcons()
     ui->actionWord_wrap->setIcon(IconProvider::fromTheme("word-wrap"));
     ui->actionMath_Rendering->setIcon(IconProvider::fromTheme("math-rendering"));
     ui->actionFull_Screen->setIcon(IconProvider::fromTheme("view-fullscreen"));
+    ui->actionExplorer->setIcon(IconProvider::fromTheme("explorer"));
 
     // Settings menu
     ui->actionPreferences->setIcon(IconProvider::fromTheme("preferences-other"));
@@ -2557,6 +2563,7 @@ QString MainWindow::getDefaultToolBarString() const
     list << "Separator";
     list << ui->actionWord_wrap->objectName();
     list << ui->actionShow_All_Characters->objectName();
+    list << ui->actionExplorer->objectName();
 
     return list.join('|');
 }
@@ -2578,6 +2585,61 @@ void MainWindow::on_actionFull_Screen_toggled(bool on)
             showMaximized();
         } else {
             showNormal();
+        }
+    }
+}
+
+void MainWindow::on_actionExplorer_toggled(bool on)
+{
+    if(on){
+        if(!m_explorerTree){
+            m_explorer = new Explorer();
+            m_explorer->setRootPath("/");
+            m_explorerTree = new QTreeView(m_contentWidget);
+            m_explorerTree->setContextMenuPolicy(Qt::CustomContextMenu);
+            m_explorerTree->setModel(m_explorer);
+            m_contentWidget->insertWidget(0, m_explorerTree);
+            m_explorerTree->setSelectionMode(QTreeView::SingleSelection);
+            connect(m_explorerTree, SIGNAL(doubleClicked(QModelIndex)), this, SLOT(treeView_doubleClicked(QModelIndex)));
+            connect(m_explorerTree->selectionModel(), SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
+                   this, SLOT(treeView_selectionChanged(QItemSelection,QItemSelection)));
+            connect(m_explorerTree, SIGNAL(customContextMenuRequested(QPoint)), this, SLOT(treeView_customContextMenu(QPoint)));
+        }else{
+            m_contentWidget->widget(0)->setVisible(true);
+        }
+
+        auto editor = currentEditor();
+        QString path = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        if (!editor->filePath().isEmpty())
+        {
+              path =  editor->filePath().toDisplayString(QUrl::PreferLocalFile |
+                                                         QUrl::RemovePassword);
+        }
+
+        auto index = m_explorer->index(path);
+        m_explorerTree->scrollTo(index);
+        m_explorerTree->expand(index);
+        m_explorerTree->setCurrentIndex(index);
+    }else{
+        if(m_explorerTree){
+            m_contentWidget->widget(0)->setVisible(false);
+        }
+    }
+}
+
+void MainWindow::treeView_doubleClicked(QModelIndex index)
+{
+    if(m_explorerTree){
+        QString path = m_explorer->filePath(index);
+        QFileInfo file(path);
+        if(file.isFile()){
+            QList<QUrl> urls;
+            urls.append(QUrl::fromLocalFile(path));
+
+            m_docEngine->getDocumentLoader()
+                    .setUrls(urls)
+                    .setTabWidget(m_topEditorContainer->currentTabWidget())
+                    .execute();
         }
     }
 }
@@ -2672,4 +2734,75 @@ void MainWindow::on_actionToggle_To_Former_Tab_triggered()
 {
     EditorTabWidget* curTabWidget = m_topEditorContainer->currentTabWidget();
     curTabWidget->setCurrentIndex(curTabWidget->formerTabIndex());
+}
+
+void MainWindow::on_actionSync_Current_File_in_Explorer_triggered()
+{
+    this->on_actionExplorer_toggled(true);
+}
+
+void MainWindow::treeView_selectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
+{
+    QModelIndexList indexes = selected.indexes();
+    if(indexes.size()>0){
+        QString path = m_explorer->filePath(indexes[0]);
+        QFileInfo file(path);
+        if(!file.isDir()){
+            path = file.dir().absolutePath();
+        }
+        m_explorer->setTitle(path);
+        emit m_explorer->headerDataChanged(Qt::Horizontal, 0, 1);
+    }
+}
+
+void MainWindow::treeView_customContextMenu(const QPoint &pos)
+{
+    QModelIndexList indexes = m_explorerTree->selectionModel()->selectedIndexes();
+    if(indexes.size()>0){
+        QString path = m_explorer->filePath(indexes[0]);
+        QFileInfo file(path);
+        if(!m_treeViewMenu){
+            m_treeViewMenu = new QMenu;
+            m_treeViewMenu->addAction(tr("Delete"), this, SLOT(treeView_deleteFileAction_triggered()));
+            m_treeViewMenu->addAction(tr("Show Containing Folder"), this, SLOT(treeView_showContainingFolderAction_triggered()));
+        }
+        m_treeViewMenu->exec(QCursor::pos());
+    }
+}
+
+void MainWindow::treeView_deleteFileAction_triggered()
+{
+    QModelIndexList indexes = m_explorerTree->selectionModel()->selectedIndexes();
+    if(indexes.size()>0){
+        QString path = m_explorer->filePath(indexes[0]);
+        QFileInfo file(path);
+        QString message = "Are you sure to delete ";
+        message += (file.isDir()?"folder \"":"file \"") +path+"\"?";
+        QMessageBox::StandardButton button = QMessageBox::warning(this, "Message", message, QMessageBox::Yes|QMessageBox::No);
+        if(button != QMessageBox::Yes){
+            return;
+        }
+        if(file.isDir()){
+            QDir dir(path);
+            dir.removeRecursively();
+            if(file.exists()){
+                m_explorer->rmdir(m_explorer->index(path));
+            }
+        }else if(file.isFile()){
+            m_explorer->remove(m_explorer->index(path));
+        }
+     }
+}
+
+void MainWindow::treeView_showContainingFolderAction_triggered()
+{
+    QModelIndexList indexes = m_explorerTree->selectionModel()->selectedIndexes();
+    if(indexes.size()>0){
+        QString path = m_explorer->filePath(indexes[0]);
+        QFileInfo file(path);
+        if(file.isFile()){
+            path = file.dir().absolutePath();
+        }
+        QDesktopServices::openUrl( QUrl::fromLocalFile( path ) );
+    }
 }

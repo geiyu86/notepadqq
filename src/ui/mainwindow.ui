@@ -45,7 +45,7 @@
      <x>0</x>
      <y>0</y>
      <width>723</width>
-     <height>23</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu_File">
@@ -153,6 +153,7 @@
     <addaction name="menuEOL_Conversion"/>
     <addaction name="menuBlank_Operations"/>
     <addaction name="menuIndentation"/>
+    <addaction name="actionSync_Current_File_in_Explorer"/>
    </widget>
    <widget class="QMenu" name="menu_Search">
     <property name="title">
@@ -210,6 +211,7 @@
     <addaction name="separator"/>
     <addaction name="separator"/>
     <addaction name="actionFull_Screen"/>
+    <addaction name="actionExplorer"/>
    </widget>
    <widget class="QMenu" name="menu_Encoding">
     <property name="title">
@@ -1067,6 +1069,22 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>
+   </property>
+  </action>
+  <action name="actionExplorer">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Explorer</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+E</string>
+   </property>
+  </action>
+  <action name="actionSync_Current_File_in_Explorer">
+   <property name="text">
+    <string>Sync Current File in Explorer</string>
    </property>
   </action>
  </widget>

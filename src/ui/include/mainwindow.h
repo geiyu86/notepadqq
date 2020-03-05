@@ -7,6 +7,7 @@
 #include "include/Search/frmsearchreplace.h"
 #include "include/nqqsettings.h"
 #include "include/topeditorcontainer.h"
+#include "explorer.h"
 
 #include "QtPrintSupport/QPrinter"
 #include <QCloseEvent>
@@ -189,6 +190,8 @@ private slots:
     void on_actionGo_to_Line_triggered();
     void on_actionInstall_Extension_triggered();
     void on_actionFull_Screen_toggled(bool on);
+    void on_actionExplorer_toggled(bool on);
+    void treeView_doubleClicked(QModelIndex index);
     void on_actionShow_End_of_Line_triggered(bool on);
     void on_actionShow_All_Characters_toggled(bool on);
     void on_actionShow_Spaces_triggered(bool on);
@@ -199,6 +202,11 @@ private slots:
     void on_actionShow_Toolbar_toggled(bool arg1);
     void on_actionMath_Rendering_toggled(bool on);
     void on_actionToggle_To_Former_Tab_triggered();
+    void on_actionSync_Current_File_in_Explorer_triggered();
+    void treeView_selectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
+    void treeView_customContextMenu(const QPoint &pos);
+    void treeView_deleteFileAction_triggered();
+    void treeView_showContainingFolderAction_triggered();
 
 private:
     static QList<MainWindow*> m_instances;
@@ -206,6 +214,7 @@ private:
     Ui::MainWindow*       ui;
     QToolBar*             m_mainToolBar = nullptr;
     TopEditorContainer*   m_topEditorContainer;
+    QSplitter* m_contentWidget;
     DocEngine*            m_docEngine;
     QMenu*                m_tabContextMenu;
     QList<QAction *>      m_tabContextMenuActions;
@@ -223,6 +232,10 @@ private:
     bool                  beginSelectPositionSet = false;
 
     AdvancedSearchDock*  m_advSearchDock;
+
+    QTreeView* m_explorerTree = nullptr;
+    Explorer* m_explorer = nullptr;
+    QMenu* m_treeViewMenu = nullptr;
 
     /**
      * @brief saveTabsToCache Saves tabs to cache. Utilizes the saveSession function and
